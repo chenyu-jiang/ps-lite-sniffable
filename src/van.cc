@@ -287,6 +287,7 @@ void Van::Start(int customer_id) {
 
     // bind.
     my_node_.port = Bind(my_node_, is_scheduler_ ? 0 : 40);
+    std::cout << "Bind to " << my_node_.DebugString() << std::endl;
     PS_VLOG(1) << "Bind to " << my_node_.DebugString();
     CHECK_NE(my_node_.port, -1) << "bind failed";
 

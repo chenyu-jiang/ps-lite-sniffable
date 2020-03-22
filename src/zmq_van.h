@@ -24,6 +24,19 @@ inline void FreeData(void *data, void *hint) {
   }
 }
 
+void SerializeInt(int integer, char* buf) {
+  for(int byte_index=0; byte_index<sizeof(int); byte_index++) {
+    buf[byte_index] = integer >> byte_index * 8;
+  }
+}
+
+void DeserializeInt(int* integer, char* buf) {
+  *integer = 0;
+  for(int byte_index=0; byte_index<sizeof(int32_t); byte_index++) {
+    *integer += buf[byte_index] << byte_index * 8;
+  }
+}
+
 /**
  * \brief ZMQ based implementation
  */
@@ -134,30 +147,55 @@ class ZMQVan : public Van {
     }
     void *socket = it->second;
 
+    // send start identifier
+    int identifier_size = sizeof(int) + 2; char* identifier_buf;
+    if(msg.data.size()) {
+      int key = msg.data[0][0];
+      identifier_buf = new char[identifier_size+sizeof(int)];
+      SerializeInt(msg.data.size(), identifier_buf);
+      identifier_buf[sizeof(int)] = 's';
+      identifier_buf[sizeof(int)+1] = ':';
+      SerializeInt(key, identifier_buf+sizeof(int)+2);
+      identifier_size += sizeof(int);
+    } else {
+      identifier_buf = new char[identifier_size];
+      SerializeInt(msg.data.size(), identifier_buf);
+      identifier_buf[sizeof(int)] = 's';
+      identifier_buf[sizeof(int)+1] = ':';
+    }
+    zmq_msg_t identifyer_msg;
+    zmq_msg_init_data(&identifyer_msg, identifier_buf, identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&identifyer_msg, socket, ZMQ_SNDMORE) == identifier_size) break;
+      if (errno == EINTR) continue;
+      return -1;
+    }
+
+    int send_bytes = identifier_size;
     // send meta
     int meta_size; char* meta_buf;
     PackMeta(msg.meta, &meta_buf, &meta_size);
     int tag = ZMQ_SNDMORE;
     int n = msg.data.size();
-    if (n == 0) tag = 0;
+    // if (n == 0) tag = 0;
     zmq_msg_t meta_msg;
     zmq_msg_init_data(&meta_msg, meta_buf, meta_size, FreeData, NULL);
     while (true) {
-      if (zmq_msg_send(&meta_msg, socket, tag) == meta_size) break;
+      if (zmq_msg_send(&meta_msg, socket, ZMQ_SNDMORE) == meta_size) break;
       if (errno == EINTR) continue;
       return -1;
     }
+    send_bytes += meta_size;
     // zmq_msg_close(&meta_msg);
-    int send_bytes = meta_size;
     // send data
     for (int i = 0; i < n; ++i) {
       zmq_msg_t data_msg;
       SArray<char>* data = new SArray<char>(msg.data[i]);
       int data_size = data->size();
       zmq_msg_init_data(&data_msg, data->data(), data->size(), FreeData, data);
-      if (i == n - 1) tag = 0;
+      // if (i == n - 1) tag = 0;
       while (true) {
-        if (zmq_msg_send(&data_msg, socket, tag) == data_size) break;
+        if (zmq_msg_send(&data_msg, socket, ZMQ_SNDMORE) == data_size) break;
         if (errno == EINTR) continue;
         LOG(WARNING) << "failed to send message to node [" << id
                      << "] errno: " << errno << " " << zmq_strerror(errno)
@@ -167,12 +205,38 @@ class ZMQVan : public Van {
       // zmq_msg_close(&data_msg);
       send_bytes += data_size;
     }
+    //send end identifier
+    int end_identifier_size = 2; char* end_identifier_buf;
+    if(msg.data.size()) {
+      int key = msg.data[0][0];
+      end_identifier_buf = new char[end_identifier_size+sizeof(int)];
+      end_identifier_buf[0] = 'e';
+      end_identifier_buf[1] = ':';
+      SerializeInt(key, end_identifier_buf+2);
+      end_identifier_size += sizeof(int);
+    } else {
+      end_identifier_buf = new char[end_identifier_size];
+      end_identifier_buf[0] = 'e';
+      end_identifier_buf[1] = ':';
+    }
+    zmq_msg_t end_identifyer_msg;
+    zmq_msg_init_data(&end_identifyer_msg, end_identifier_buf, end_identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&end_identifyer_msg, socket, 0) == end_identifier_size) break;
+      if (errno == EINTR) continue;
+      LOG(WARNING) << "failed to send message to node [" << id
+              << "] errno: " << errno << " " << zmq_strerror(errno)
+              << ". ";
+      return -1;
+    }
+    send_bytes += end_identifier_size;
     return send_bytes;
   }
 
   int RecvMsg(Message* msg) override {
     msg->data.clear();
     size_t recv_bytes = 0;
+    int msg_length = 0;
     for (int i = 0; ; ++i) {
       zmq_msg_t* zmsg = new zmq_msg_t;
       CHECK(zmq_msg_init(zmsg) == 0) << zmq_strerror(errno);
@@ -198,21 +262,39 @@ class ZMQVan : public Van {
         zmq_msg_close(zmsg);
         delete zmsg;
       } else if (i == 1) {
+        // start identifyer
+        DeserializeInt(&msg_length, buf);
+        CHECK(zmq_msg_more(zmsg));
+        zmq_msg_close(zmsg);
+        delete zmsg;
+      } else if (i == 2) {
         // task
         UnpackMeta(buf, size, &(msg->meta));
         zmq_msg_close(zmsg);
-        bool more = zmq_msg_more(zmsg);
+        CHECK(zmq_msg_more(zmsg));
+        // bool more = zmq_msg_more(zmsg);
         delete zmsg;
-        if (!more) break;
+        // if(!more) break;
       } else {
-        // zero-copy
-        SArray<char> data;
-        data.reset(buf, size, [zmsg, size](char* buf) {
-            zmq_msg_close(zmsg);
-            delete zmsg;
-          });
-        msg->data.push_back(data);
-        if (!zmq_msg_more(zmsg)) { break; }
+        if (msg_length == 0) {
+          // end identifyer
+          CHECK(buf[0] == 'e');
+          CHECK(!zmq_msg_more(zmsg));
+          zmq_msg_close(zmsg);
+          delete zmsg;
+          break;
+        } else {
+          // zero-copy
+          SArray<char> data;
+          data.reset(buf, size, [zmsg, size](char* buf) {
+              zmq_msg_close(zmsg);
+              delete zmsg;
+            });
+          msg->data.push_back(data);
+          msg_length --;
+          // if(!zmq_msg_more(zmsg)) break;
+          CHECK(zmq_msg_more(zmsg));
+        }
       }
     }
     return recv_bytes;
