@@ -3,14 +3,18 @@
  */
 #ifndef PS_ZMQ_VAN_H_
 #define PS_ZMQ_VAN_H_
-#include <zmq.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <thread>
+#include <zmq.h>
 #include <string>
+#include <unordered_map>
 #include "ps/internal/van.h"
+#include "ps/ps.h"
 #if _MSC_VER
 #define rand_r(x) rand()
 #endif
+
+#define MTU 1500
 
 namespace ps {
 /**
@@ -18,9 +22,41 @@ namespace ps {
  */
 inline void FreeData(void *data, void *hint) {
   if (hint == NULL) {
-    delete [] static_cast<char*>(data);
+    delete[] static_cast<char*>(data);
   } else {
     delete static_cast<SArray<char>*>(hint);
+  }
+}
+
+int DecodeKey(Key key, int receiver_id) {
+  auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+  return key - kr.begin();
+}
+
+void SerializeInt(int integer, char* buf) {
+  for(int byte_index=0; byte_index<sizeof(int); byte_index++) {
+    buf[byte_index] = integer >> byte_index * 8;
+  }
+}
+
+void DeserializeInt(int* integer, char* buf) {
+  *integer = 0;
+  for(int byte_index=0; byte_index<sizeof(int32_t); byte_index++) {
+    *integer += buf[byte_index] << byte_index * 8;
+  }
+}
+
+void MultiplyBuffer(int* size, char** buf) {
+  if((*size) < MTU && (*size) != 0) {
+    int new_size = MTU % (*size) == 0 ? MTU : (MTU / (*size) + 1) * (*size);
+    int repeat = new_size / (*size);
+    char* newbuf = new char[new_size];
+    for(int i=0; i< repeat; i++) {
+      memcpy(newbuf+i*(*size), *buf, (*size));
+    }
+    delete[] *buf;
+    *buf = newbuf;
+    *size = new_size;
   }
 }
 
@@ -29,8 +65,8 @@ inline void FreeData(void *data, void *hint) {
  */
 class ZMQVan : public Van {
  public:
-  ZMQVan() { }
-  virtual ~ZMQVan() { }
+  ZMQVan() {}
+  virtual ~ZMQVan() {}
 
  protected:
   void Start(int customer_id) override {
@@ -76,8 +112,8 @@ class ZMQVan : public Van {
     }
     std::string addr = local ? "ipc:///tmp/" : "tcp://" + hostname + ":";
     int port = node.port;
-    unsigned seed = static_cast<unsigned>(time(NULL)+port);
-    for (int i = 0; i < max_retry+1; ++i) {
+    unsigned seed = static_cast<unsigned>(time(NULL) + port);
+    for (int i = 0; i < max_retry + 1; ++i) {
       auto address = addr + std::to_string(port);
       if (zmq_bind(receiver_, address.c_str()) == 0) break;
       if (i == max_retry) {
@@ -110,6 +146,11 @@ class ZMQVan : public Van {
     if (my_node_.id != Node::kEmpty) {
       std::string my_id = "ps" + std::to_string(my_node_.id);
       zmq_setsockopt(sender, ZMQ_IDENTITY, my_id.data(), my_id.size());
+      const char* watermark = Environment::Get()->find("DMLC_PS_WATER_MARK");
+      if (watermark) {
+        const int hwm = atoi(watermark);
+        zmq_setsockopt(sender, ZMQ_SNDHWM, &hwm, sizeof(hwm));
+      }
     }
     // connect
     std::string addr = "tcp://" + node.hostname + ":" + std::to_string(node.port);
@@ -134,30 +175,55 @@ class ZMQVan : public Van {
     }
     void *socket = it->second;
 
+    // send start identifier
+    int identifier_size = 2*sizeof(int) + 4; char* identifier_buf;
+    identifier_buf = new char[identifier_size];
+    SerializeInt(msg.data.size(), identifier_buf);
+    identifier_buf[sizeof(int)] = 's';
+    identifier_buf[sizeof(int)+1] = ':';
+    identifier_buf[sizeof(int)+2] = msg.meta.request ? 1 : 0;
+    identifier_buf[sizeof(int)+3] = msg.meta.push ? 1 : 0;
+    if(msg.data.size()) {
+      SArray<Key> keys(msg.data[0]);
+      int key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeInt(key, identifier_buf+sizeof(int)+4);
+    } else {
+      SerializeInt(-1, identifier_buf+sizeof(int)+4);
+    }
+    MultiplyBuffer(&identifier_size, &identifier_buf);
+    zmq_msg_t identifyer_msg;
+    zmq_msg_init_data(&identifyer_msg, identifier_buf, identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&identifyer_msg, socket, ZMQ_SNDMORE) == identifier_size) break;
+      if (errno == EINTR) continue;
+      return -1;
+    }
+
+    int send_bytes = identifier_size;
     // send meta
     int meta_size; char* meta_buf;
     PackMeta(msg.meta, &meta_buf, &meta_size);
     int tag = ZMQ_SNDMORE;
     int n = msg.data.size();
-    if (n == 0) tag = 0;
+    // if (n == 0) tag = 0;
     zmq_msg_t meta_msg;
     zmq_msg_init_data(&meta_msg, meta_buf, meta_size, FreeData, NULL);
     while (true) {
-      if (zmq_msg_send(&meta_msg, socket, tag) == meta_size) break;
+      if (zmq_msg_send(&meta_msg, socket, ZMQ_SNDMORE) == meta_size) break;
       if (errno == EINTR) continue;
       return -1;
     }
+    send_bytes += meta_size;
     // zmq_msg_close(&meta_msg);
-    int send_bytes = meta_size;
     // send data
     for (int i = 0; i < n; ++i) {
       zmq_msg_t data_msg;
       SArray<char>* data = new SArray<char>(msg.data[i]);
       int data_size = data->size();
       zmq_msg_init_data(&data_msg, data->data(), data->size(), FreeData, data);
-      if (i == n - 1) tag = 0;
+      // if (i == n - 1) tag = 0;
       while (true) {
-        if (zmq_msg_send(&data_msg, socket, tag) == data_size) break;
+        if (zmq_msg_send(&data_msg, socket, ZMQ_SNDMORE) == data_size) break;
         if (errno == EINTR) continue;
         LOG(WARNING) << "failed to send message to node [" << id
                      << "] errno: " << errno << " " << zmq_strerror(errno)
@@ -167,12 +233,39 @@ class ZMQVan : public Van {
       // zmq_msg_close(&data_msg);
       send_bytes += data_size;
     }
+    //send end identifier
+    int end_identifier_size = 4 + sizeof(int); char* end_identifier_buf;
+    end_identifier_buf = new char[end_identifier_size];
+    end_identifier_buf[0] = 'e';
+    end_identifier_buf[1] = ':';
+    end_identifier_buf[2] = msg.meta.request ? 1 : 0;
+    end_identifier_buf[3] = msg.meta.push ? 1 : 0;
+    if(msg.data.size()) {
+      SArray<Key> keys(msg.data[0]);
+      int key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeInt(key, end_identifier_buf+4);
+    } else {
+      SerializeInt(-1, end_identifier_buf+4);
+    }
+    MultiplyBuffer(&end_identifier_size, &end_identifier_buf);
+    zmq_msg_t end_identifyer_msg;
+    zmq_msg_init_data(&end_identifyer_msg, end_identifier_buf, end_identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&end_identifyer_msg, socket, 0) == end_identifier_size) break;
+      if (errno == EINTR) continue;
+      LOG(WARNING) << "failed to send message to node [" << id
+              << "] errno: " << errno << " " << zmq_strerror(errno)
+              << ". ";
+      return -1;
+    }
+    send_bytes += end_identifier_size;
     return send_bytes;
   }
 
   int RecvMsg(Message* msg) override {
     msg->data.clear();
     size_t recv_bytes = 0;
+    int msg_length = 0;
     for (int i = 0; ; ++i) {
       zmq_msg_t* zmsg = new zmq_msg_t;
       CHECK(zmq_msg_init(zmsg) == 0) << zmq_strerror(errno);
@@ -198,21 +291,39 @@ class ZMQVan : public Van {
         zmq_msg_close(zmsg);
         delete zmsg;
       } else if (i == 1) {
+        // start identifyer
+        DeserializeInt(&msg_length, buf);
+        CHECK(zmq_msg_more(zmsg));
+        zmq_msg_close(zmsg);
+        delete zmsg;
+      } else if (i == 2) {
         // task
         UnpackMeta(buf, size, &(msg->meta));
         zmq_msg_close(zmsg);
-        bool more = zmq_msg_more(zmsg);
+        CHECK(zmq_msg_more(zmsg));
+        // bool more = zmq_msg_more(zmsg);
         delete zmsg;
-        if (!more) break;
+        // if(!more) break;
       } else {
-        // zero-copy
-        SArray<char> data;
-        data.reset(buf, size, [zmsg, size](char* buf) {
-            zmq_msg_close(zmsg);
-            delete zmsg;
-          });
-        msg->data.push_back(data);
-        if (!zmq_msg_more(zmsg)) { break; }
+        if (msg_length == 0) {
+          // end identifyer
+          CHECK(buf[0] == 'e');
+          CHECK(!zmq_msg_more(zmsg));
+          zmq_msg_close(zmsg);
+          delete zmsg;
+          break;
+        } else {
+          // zero-copy
+          SArray<char> data;
+          data.reset(buf, size, [zmsg, size](char* buf) {
+              zmq_msg_close(zmsg);
+              delete zmsg;
+            });
+          msg->data.push_back(data);
+          msg_length --;
+          // if(!zmq_msg_more(zmsg)) break;
+          CHECK(zmq_msg_more(zmsg));
+        }
       }
     }
     return recv_bytes;
@@ -250,10 +361,6 @@ class ZMQVan : public Van {
 }  // namespace ps
 
 #endif  // PS_ZMQ_VAN_H_
-
-
-
-
 
 // monitors the liveness other nodes if this is
 // a schedule node, or monitors the liveness of the scheduler otherwise
@@ -294,3 +401,4 @@ class ZMQVan : public Van {
 //   }
 //   zmq_close(s);
 // }
+
