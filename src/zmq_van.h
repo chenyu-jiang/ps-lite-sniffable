@@ -5,6 +5,7 @@
 #define PS_ZMQ_VAN_H_
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdint>
 #include <zmq.h>
 #include <string>
 #include <unordered_map>
@@ -28,7 +29,7 @@ inline void FreeData(void *data, void *hint) {
   }
 }
 
-int DecodeKey(Key key, int receiver_id) {
+uint64_t DecodeKey(Key key, int receiver_id) {
   if (Postoffice::Get()->is_server()) {
     auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
     return key - kr.begin();
@@ -44,9 +45,22 @@ void SerializeInt(int integer, char* buf) {
   }
 }
 
+void SerializeUInt64(uint64_t integer, char* buf) {
+  for(int byte_index=0; byte_index<sizeof(uint64_t); byte_index++) {
+    buf[byte_index] = integer >> byte_index * 8;
+  }
+}
+
+void DeserializeUInt64(uint64_t* integer, char* buf) {
+  *integer = 0;
+  for(int byte_index=0; byte_index<sizeof(uint64_t); byte_index++) {
+    *integer += buf[byte_index] << byte_index * 8;
+  }
+}
+
 void DeserializeInt(int* integer, char* buf) {
   *integer = 0;
-  for(int byte_index=0; byte_index<sizeof(int32_t); byte_index++) {
+  for(int byte_index=0; byte_index<sizeof(int); byte_index++) {
     *integer += buf[byte_index] << byte_index * 8;
   }
 }
@@ -181,7 +195,7 @@ class ZMQVan : public Van {
     void *socket = it->second;
 
     // send start identifier
-    int identifier_size = 2*sizeof(int) + 4; char* identifier_buf;
+    int identifier_size = sizeof(int) + 4 + sizeof(uint64_t); char* identifier_buf;
     identifier_buf = new char[identifier_size];
     SerializeInt(msg.data.size(), identifier_buf);
     identifier_buf[sizeof(int)] = 's';
@@ -190,10 +204,10 @@ class ZMQVan : public Van {
     identifier_buf[sizeof(int)+3] = msg.meta.push ? 1 : 0;
     if(msg.data.size()) {
       SArray<Key> keys(msg.data[0]);
-      int key = DecodeKey(keys[0], msg.meta.recver);
-      SerializeInt(key, identifier_buf+sizeof(int)+4);
+      uint64_t key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeUInt64(key, identifier_buf+sizeof(int)+4);
     } else {
-      SerializeInt(-1, identifier_buf+sizeof(int)+4);
+      SerializeUInt64(UINT64_MAX, identifier_buf+sizeof(int)+4);
     }
     MultiplyBuffer(&identifier_size, &identifier_buf);
     zmq_msg_t identifyer_msg;
@@ -239,7 +253,7 @@ class ZMQVan : public Van {
       send_bytes += data_size;
     }
     //send end identifier
-    int end_identifier_size = 4 + sizeof(int); char* end_identifier_buf;
+    int end_identifier_size = 4 + sizeof(uint64_t); char* end_identifier_buf;
     end_identifier_buf = new char[end_identifier_size];
     end_identifier_buf[0] = 'e';
     end_identifier_buf[1] = ':';
@@ -247,10 +261,10 @@ class ZMQVan : public Van {
     end_identifier_buf[3] = msg.meta.push ? 1 : 0;
     if(msg.data.size()) {
       SArray<Key> keys(msg.data[0]);
-      int key = DecodeKey(keys[0], msg.meta.recver);
-      SerializeInt(key, end_identifier_buf+4);
+      uint64_t key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeUInt64(key, end_identifier_buf+4);
     } else {
-      SerializeInt(-1, end_identifier_buf+4);
+      SerializeUInt64(UINT64_MAX, end_identifier_buf+4);
     }
     MultiplyBuffer(&end_identifier_size, &end_identifier_buf);
     zmq_msg_t end_identifyer_msg;
