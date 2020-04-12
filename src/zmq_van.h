@@ -29,7 +29,12 @@ inline void FreeData(void *data, void *hint) {
 }
 
 int DecodeKey(Key key, int receiver_id) {
-  auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+  const std::vector<Range> kr;
+  if (Postoffice::Get()->is_server()) {
+    kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
+  } else {
+    kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+  }
   return key - kr.begin();
 }
 
