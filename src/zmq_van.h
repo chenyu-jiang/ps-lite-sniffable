@@ -29,13 +29,13 @@ inline void FreeData(void *data, void *hint) {
 }
 
 int DecodeKey(Key key, int receiver_id) {
-  const Range kr;
   if (Postoffice::Get()->is_server()) {
-    kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
+    auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
+    return key - kr.begin();
   } else {
-    kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+    auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+    return key - kr.begin();
   }
-  return key - kr.begin();
 }
 
 void SerializeInt(int integer, char* buf) {
