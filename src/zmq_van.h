@@ -328,6 +328,7 @@ class ZMQVan : public Van {
           // end identifyer
           CHECK(buf[0] == 'e');
           CHECK(!zmq_msg_more(zmsg));
+          // TODO: log an end event here
           zmq_msg_close(zmsg);
           delete zmsg;
           break;
@@ -339,6 +340,12 @@ class ZMQVan : public Van {
               delete zmsg;
             });
           msg->data.push_back(data);
+          if (i == 3) {
+            SArray<Key> keys(msg.data[0]);
+            uint64_t key = DecodeKey(keys[0], my_node_.id);
+            // TODO: log a start event here
+
+          }
           msg_length --;
           // if(!zmq_msg_more(zmsg)) break;
           CHECK(zmq_msg_more(zmsg));
