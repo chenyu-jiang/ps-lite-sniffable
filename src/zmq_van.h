@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include "ps/internal/van.h"
 #include "ps/ps.h"
+#include "recv_event_logger.h"
 #if _MSC_VER
 #define rand_r(x) rand()
 #endif
@@ -99,6 +100,15 @@ class ZMQVan : public Van {
     start_mu_.unlock();
     // zmq_ctx_set(context_, ZMQ_IO_THREADS, 4);
     Van::Start(customer_id);
+    auto log_dir= getenv("PSLITE_TIMESTAMP_PATH");
+    std::string log_path;
+    if (log_dir != NULL) {
+      log_path = log_dir;
+    } else {
+      log_path = "."
+    }
+    logger_.Init(std::to_string(my_node_.id), log_path + std::to_string(my_node_.id) + ".txt");
+    logger_.LogString(my_node_.DebugString());
   }
 
   void Stop() override {
@@ -301,7 +311,7 @@ class ZMQVan : public Van {
       char* buf = CHECK_NOTNULL((char *)zmq_msg_data(zmsg));
       size_t size = zmq_msg_size(zmsg);
       recv_bytes += size;
-
+      uint64_t key = 0;
       if (i == 0) {
         // identify
         msg->meta.sender = GetNodeID(buf, size);
@@ -329,6 +339,7 @@ class ZMQVan : public Van {
           CHECK(buf[0] == 'e');
           CHECK(!zmq_msg_more(zmsg));
           // TODO: log an end event here
+          logger_.LogEvent(false, msg->meta.push, msg->meta.request, key, msg->meta.sender, my_node_.id);
           zmq_msg_close(zmsg);
           delete zmsg;
           break;
@@ -342,9 +353,9 @@ class ZMQVan : public Van {
           msg->data.push_back(data);
           if (i == 3) {
             SArray<Key> keys(msg->data[0]);
-            uint64_t key = DecodeKey(keys[0], my_node_.id);
+            key = DecodeKey(keys[0], my_node_.id);
             // TODO: log a start event here
-
+            logger_.LogEvent(true, msg->meta.push, msg->meta.request, key, msg->meta.sender, my_node_.id);
           }
           msg_length --;
           // if(!zmq_msg_more(zmsg)) break;
@@ -383,6 +394,7 @@ class ZMQVan : public Van {
   std::unordered_map<int, void*> senders_;
   std::mutex mu_;
   void *receiver_ = nullptr;
+  RecvEventLogger logger_;
 };
 }  // namespace ps
 
