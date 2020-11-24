@@ -105,7 +105,7 @@ class ZMQVan : public Van {
     if (log_dir != NULL) {
       log_path = log_dir;
     } else {
-      log_path = "."
+      log_path = ".";
     }
     logger_.Init(std::to_string(my_node_.id), log_path + std::to_string(my_node_.id) + ".txt");
     logger_.LogString(my_node_.DebugString());
