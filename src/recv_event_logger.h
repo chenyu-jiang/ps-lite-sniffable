@@ -7,7 +7,7 @@
 
 class RecvEventLogger {
 public:
-    RecvEventLogger();
+    RecvEventLogger() {};
 
     RecvEventLogger(std::string logger_name, std::string log_path) {
         Init(logger_name, log_path);
