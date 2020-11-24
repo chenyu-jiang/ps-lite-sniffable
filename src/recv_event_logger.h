@@ -15,7 +15,7 @@ public:
 
     void LogEvent(bool is_start, bool is_push, bool is_req, uint64_t tid, int sender, int recver) {
         auto now = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch());
-        async_logger->info("{} {} {} {} {} {} {}", now, is_start, is_push, is_req, tid, sender, recver);
+        async_logger->info("{} {} {} {} {} {} {}", std::to_string(now.count()), is_start, is_push, is_req, tid, sender, recver);
     }
 
 private:

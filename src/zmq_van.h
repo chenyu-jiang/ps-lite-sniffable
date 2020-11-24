@@ -341,7 +341,7 @@ class ZMQVan : public Van {
             });
           msg->data.push_back(data);
           if (i == 3) {
-            SArray<Key> keys(msg.data[0]);
+            SArray<Key> keys(msg->data[0]);
             uint64_t key = DecodeKey(keys[0], my_node_.id);
             // TODO: log a start event here
 
