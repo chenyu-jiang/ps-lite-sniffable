@@ -100,15 +100,7 @@ class ZMQVan : public Van {
     start_mu_.unlock();
     // zmq_ctx_set(context_, ZMQ_IO_THREADS, 4);
     Van::Start(customer_id);
-    auto log_dir= getenv("PSLITE_TIMESTAMP_PATH");
-    std::string log_path;
-    if (log_dir != NULL) {
-      log_path = log_dir;
-    } else {
-      log_path = ".";
-    }
-    logger_.Init(std::to_string(my_node_.id), log_path + std::to_string(my_node_.id) + ".txt");
-    logger_.LogString(my_node_.DebugString());
+    // std::cout << "Van::Start finished. Before setting log_dir" << std::endl;
   }
 
   void Stop() override {
@@ -205,7 +197,8 @@ class ZMQVan : public Van {
     void *socket = it->second;
 
     // send start identifier
-    int identifier_size = sizeof(int) + 4 + sizeof(uint64_t); char* identifier_buf;
+    int identifier_size = sizeof(int) + 4 + sizeof(uint64_t); 
+    char* identifier_buf;
     identifier_buf = new char[identifier_size];
     SerializeInt(msg.data.size(), identifier_buf);
     identifier_buf[sizeof(int)] = 's';
@@ -292,9 +285,28 @@ class ZMQVan : public Van {
   }
 
   int RecvMsg(Message* msg) override {
+    if (!logger_.IsInited() && my_node_.id != Node::kEmpty) {
+      std::string log_path;
+      const char *path_val = Environment::Get()->find("PSLITE_TIMESTAMP_PATH");
+      if (path_val == nullptr) {
+        log_path =  ".";
+      } else {
+        log_path = path_val;
+      }
+      // std::string log_path = ps::GetEnv<std::string>("PSLITE_TIMESTAMP_PATH", ".");
+      // if (log_dir != NULL) {
+      //   log_path = log_dir;
+      // } else {
+      //   log_path = ".";
+      // }
+      logger_.Init(std::to_string(my_node_.id), log_path + "_"+ std::to_string(my_node_.id) + ".txt");
+      // std::cout << "logs dumping to " << log_path + "_" + std::to_string(my_node_.id) + ".txt" << std::endl;
+      logger_.LogString(my_node_.DebugString());
+    }
     msg->data.clear();
     size_t recv_bytes = 0;
     int msg_length = 0;
+    uint64_t key = 0;
     for (int i = 0; ; ++i) {
       zmq_msg_t* zmsg = new zmq_msg_t;
       CHECK(zmq_msg_init(zmsg) == 0) << zmq_strerror(errno);
@@ -311,7 +323,6 @@ class ZMQVan : public Van {
       char* buf = CHECK_NOTNULL((char *)zmq_msg_data(zmsg));
       size_t size = zmq_msg_size(zmsg);
       recv_bytes += size;
-      uint64_t key = 0;
       if (i == 0) {
         // identify
         msg->meta.sender = GetNodeID(buf, size);
@@ -339,7 +350,10 @@ class ZMQVan : public Van {
           CHECK(buf[0] == 'e');
           CHECK(!zmq_msg_more(zmsg));
           // TODO: log an end event here
-          logger_.LogEvent(false, msg->meta.push, msg->meta.request, key, msg->meta.sender, my_node_.id);
+          // std::cout << "Log event end " << std::endl;
+          if (logger_.IsInited())
+            logger_.LogEvent(false, msg->meta.push, msg->meta.request, key, msg->meta.sender, my_node_.id);
+          // std::cout << "Log event end finished." << std::endl;
           zmq_msg_close(zmsg);
           delete zmsg;
           break;
@@ -351,10 +365,11 @@ class ZMQVan : public Van {
               delete zmsg;
             });
           msg->data.push_back(data);
-          if (i == 3) {
+          if (i == 3 && logger_.IsInited()) {
             SArray<Key> keys(msg->data[0]);
             key = DecodeKey(keys[0], my_node_.id);
             // TODO: log a start event here
+            // std::cout << "Log event start " << std::endl;
             logger_.LogEvent(true, msg->meta.push, msg->meta.request, key, msg->meta.sender, my_node_.id);
           }
           msg_length --;
