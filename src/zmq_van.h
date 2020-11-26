@@ -99,7 +99,7 @@ class ZMQVan : public Van {
     start_mu_.unlock();
     // zmq_ctx_set(context_, ZMQ_IO_THREADS, 4);
     Van::Start(customer_id);
-    zmq_log(my_node_.DebugString());
+    zmq_log(my_node_.DebugString().c_str());
   }
 
   void Stop() override {
