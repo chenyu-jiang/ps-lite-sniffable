@@ -13,10 +13,15 @@ public:
         Init(logger_name, log_path);
     }
 
+    bool IsInited() {
+        return inited_;
+    }
+
     void Init(std::string logger_name, std::string log_path) {
         async_logger_ = spdlog::basic_logger_mt<spdlog::async_factory>(logger_name, log_path);
         spdlog::flush_every(std::chrono::seconds(3));
         async_logger_->set_pattern("%v");
+        inited_ = true;
     }
 
     void LogEvent(bool is_start, bool is_push, bool is_req, uint64_t tid, int sender, int recver) {
@@ -30,4 +35,5 @@ public:
 
 private:
     std::shared_ptr<spdlog::logger> async_logger_ = nullptr;
+    bool inited_ = false;
 };
