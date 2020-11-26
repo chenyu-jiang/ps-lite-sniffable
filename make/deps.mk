@@ -31,7 +31,7 @@ ${ZMQ}:
 	$(eval DIR=libzmq)
 	rm -rf $(DIR)
 	git clone $(ZMQ_URL)
-	cd $(DIR) && export CFLAGS=-fPIC && export CXXFLAGS=-fPIC && mkdir build && cd build && cmake -D WITH_PERF_TOOL=OFF -D ZMQ_BUILD_TESTS=OFF -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=${DEPS_PATH} && $(MAKE) && $(MAKE) install
+	cd $(DIR) && export CFLAGS=-fPIC && export CXXFLAGS=-fPIC && mkdir build && cd build && cmake -D WITH_PERF_TOOL=OFF -D ZMQ_BUILD_TESTS=OFF -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=${DEPS_PATH} .. && $(MAKE) && $(MAKE) install
 	rm -rf $(DIR)
 
 # lz4
