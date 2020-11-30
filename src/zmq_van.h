@@ -54,7 +54,7 @@ void SerializeUInt64(uint64_t integer, char* buf) {
 void DeserializeUInt64(uint64_t* integer, char* buf) {
   *integer = 0;
   for(int byte_index=0; byte_index<sizeof(uint64_t); byte_index++) {
-    *integer += buf[byte_index] << byte_index * 8;
+    *integer += (unsigned char)buf[byte_index] << byte_index * 8;
   }
 }
 
