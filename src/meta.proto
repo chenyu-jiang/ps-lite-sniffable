@@ -1,6 +1,7 @@
 /**
  *  Copyright (c) 2015 by Contributors
  */
+syntax = "proto2";
 package ps;
 option optimize_for = LITE_RUNTIME;
 
@@ -50,4 +51,14 @@ message PBMeta {
   optional bool push = 5;
   // whether or not it's for SimpleApp
   optional bool simple_app = 6 [default = false];
+  // message.data_size 
+  optional int32 data_size = 11;
+  // message.key
+  optional uint64 key = 12;
+  // message.addr
+  optional uint64 addr = 13 [default = 0];
+  // the length of the message's value
+  optional int32 val_len = 14;
+  // the option field
+  optional int32 option = 15;
 }

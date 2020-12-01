@@ -25,7 +25,7 @@ if (NOT __ZMQ_INCLUDED) # guard against multiple includes
 
     ExternalProject_Add(ZMQ
       PREFIX ${ZMQ_PREFIX}
-      GIT_REPOSITORY "https://github.com/chenyu-jiang/libzmq.git"
+      GIT_REPOSITORY "https://github.com/zeromq/libZMQ.git"
       UPDATE_COMMAND ""
       INSTALL_DIR ${ZMQ_INSTALL}
       CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}

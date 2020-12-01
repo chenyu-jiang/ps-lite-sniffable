@@ -10,12 +10,18 @@
 
 namespace ps {
 Postoffice::Postoffice() {
-  van_ = Van::Create("zmq");
   env_ref_ = Environment::_GetSharedRef();
 }
 
 void Postoffice::InitEnvironment() {
   const char* val = NULL;
+  int enable_rdma = GetEnv("DMLC_ENABLE_RDMA", 0);
+  if (enable_rdma) {
+    LOG(INFO) << "enable RDMA for networking";
+    van_ = Van::Create("rdma");
+  } else {
+    van_ = Van::Create("zmq");
+  }
   val = CHECK_NOTNULL(Environment::Get()->find("DMLC_NUM_WORKER"));
   num_workers_ = atoi(val);
   val =  CHECK_NOTNULL(Environment::Get()->find("DMLC_NUM_SERVER"));
@@ -148,7 +154,6 @@ void Postoffice::Barrier(int customer_id, int node_group) {
   } else if (role == Node::SERVER) {
     CHECK(node_group & kServerGroup);
   }
-
   std::unique_lock<std::mutex> ulk(barrier_mu_);
   barrier_done_[0][customer_id] = false;
   Message req;
@@ -183,8 +188,8 @@ void Postoffice::Manage(const Message& recv) {
   const auto& ctrl = recv.meta.control;
   if (ctrl.cmd == Control::BARRIER && !recv.meta.request) {
     barrier_mu_.lock();
-    for (int customer_id = 0; customer_id < barrier_done_[recv.meta.app_id].size();
-         customer_id++) {
+    auto size = barrier_done_[recv.meta.app_id].size();
+    for (size_t customer_id = 0; customer_id < size; customer_id++) {
       barrier_done_[recv.meta.app_id][customer_id] = true;
     }
     barrier_mu_.unlock();

@@ -14,7 +14,6 @@
 #include "ps/internal/message.h"
 #include "ps/internal/threadsafe_queue.h"
 namespace ps {
-
 /**
  * \brief The object for communication.
  *

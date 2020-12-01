@@ -8,8 +8,6 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
-find_package(spdlog REQUIRED)
-
 include(ExternalProject) 
 set(pslite_LINKER_LIBS_L "" )
 set(pslite_LINKER_LIBS_L_RELEASE "" )
@@ -75,7 +73,3 @@ set(pslite_LINKER_LIBS ${pslite_LINKER_LIBS_L} PARENT_SCOPE)
 set(pslite_LINKER_LIBS_RELEASE ${pslite_LINKER_LIBS_L_RELEASE} PARENT_SCOPE)
 set(pslite_LINKER_LIBS_DEBUG ${pslite_LINKER_LIBS_L_DEBUG} PARENT_SCOPE)
 set(pslite_INCLUDE_DIR ${pslite_INCLUDE_DIR_L} PARENT_SCOPE)
-
-# compile test for logger
-add_executable(logger "src/logger_test.cc")
-target_link_libraries(logger PRIVATE spdlog::spdlog)
