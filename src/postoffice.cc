@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <thread>
 #include <chrono>
+#include <iostream>
 #include "ps/internal/postoffice.h"
 #include "ps/internal/message.h"
 #include "ps/base.h"
@@ -18,8 +19,10 @@ void Postoffice::InitEnvironment() {
   int enable_rdma = GetEnv("DMLC_ENABLE_RDMA", 0);
   if (enable_rdma) {
     LOG(INFO) << "enable RDMA for networking";
+    std::cout << "~~~~~~~~~~~~~~~ USING RDMA VAN ~~~~~~~~~~~~~~" << std::endl;
     van_ = Van::Create("rdma");
   } else {
+    std::cout << "~~~~~~~~~~~~~~~ USING ZMQ VAN ~~~~~~~~~~~~~~" << std::endl;
     van_ = Van::Create("zmq");
   }
   val = CHECK_NOTNULL(Environment::Get()->find("DMLC_NUM_WORKER"));
