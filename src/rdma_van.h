@@ -6,7 +6,7 @@
 */
 #ifndef PS_RDMA_VAN_H_
 #define PS_RDMA_VAN_H_
-#define DMLC_USE_RDMA
+
 #ifdef DMLC_USE_RDMA
 
 #include <errno.h>
@@ -904,8 +904,8 @@ class RDMAVan : public Van {
 
     if (IsValidPushpull(*msg)) {
       // Log key
-      uint64_t key_for_logging = DecodeKey(msg.meta.key, msg.meta.recver);
-      BPSLogger::RecvEventLogger::GetLogger().LogEvent(false, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
+      uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.recver);
+      BPSLogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
     }
 
     if (IsValidPushpull(*msg) && !msg->meta.push && !msg->meta.request) { // worker
