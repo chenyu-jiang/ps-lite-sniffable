@@ -8,6 +8,8 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
+find_package(spdlog REQUIRED)
+
 include(ExternalProject) 
 set(pslite_LINKER_LIBS_L "" )
 set(pslite_LINKER_LIBS_L_RELEASE "" )

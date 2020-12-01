@@ -18,14 +18,14 @@ ${PROTOBUF}:
 
 # zmq
 ZMQ = ${DEPS_PATH}/include/zmq.h
+ZMQ_URL=https://github.com/chenyu-jiang/libzmq.git
 
 ${ZMQ}:
-	$(eval FILE=zeromq-4.1.4.tar.gz)
-	$(eval DIR=zeromq-4.1.4)
-	rm -rf $(FILE) $(DIR)
-	$(WGET) $(URL1)/$(FILE) && tar --no-same-owner -zxf $(FILE)
-	cd $(DIR) && export CFLAGS=-fPIC && export CXXFLAGS=-fPIC && ./configure -prefix=$(DEPS_PATH) --with-libsodium=no --with-libgssapi_krb5=no && $(MAKE) && $(MAKE) install
-	rm -rf $(FILE) $(DIR)
+	$(eval DIR=libzmq)
+	rm -rf $(DIR)
+	git clone $(ZMQ_URL)
+	cd $(DIR) && export CFLAGS=-fPIC && export CXXFLAGS=-fPIC && mkdir build && cd build && cmake -D WITH_PERF_TOOL=OFF -D ZMQ_BUILD_TESTS=OFF -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=${DEPS_PATH} .. && $(MAKE) && $(MAKE) install
+	rm -rf $(DIR)
 
 # lz4
 LZ4 = ${DEPS_PATH}/include/lz4.h
