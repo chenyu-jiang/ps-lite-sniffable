@@ -6,7 +6,7 @@
 */
 #ifndef PS_RDMA_VAN_H_
 #define PS_RDMA_VAN_H_
-
+#define DMLC_USE_RDMA
 #ifdef DMLC_USE_RDMA
 
 #include <errno.h>
@@ -31,6 +31,7 @@
 
 #include "ps/internal/threadsafe_queue.h"
 #include "ps/internal/van.h"
+#include "ps/event_logger.h"
 
 namespace ps {
 
@@ -484,6 +485,8 @@ class RDMAVan : public Van {
 
     start_mu_.unlock();
     Van::Start(customer_id);
+
+    BPSLogger::RecvEventLogger::GetLogger().LogString(my_node_.DebugString());
   }
 
   void Stop() override {
@@ -666,6 +669,16 @@ class RDMAVan : public Van {
     return key;
   }
 
+  uint64_t DecodeKey(Key key, int receiver_id) {
+    if (Postoffice::Get()->is_server()) {
+      auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
+      return key - kr.begin();
+    } else {
+      auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+      return key - kr.begin();
+    }
+  }
+
   int SendMsg(Message &msg) override {
     int remote_id = msg.meta.recver;
     CHECK_NE(remote_id, Meta::kEmpty);
@@ -688,10 +701,16 @@ class RDMAVan : public Van {
     }
 
     if (IsValidPushpull(msg)) {
+      // Log key
+      SArray<Key> keys(msg.data[0]);
+      uint64_t key_for_logging = DecodeKey(keys[0], msg.meta.recver);
+      BPSLogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
+
       if (!is_server) { // worker
         std::lock_guard<std::mutex> lock(map_mu_);
         uint64_t key = DecodeKey(msg.data[0]);
         msg.meta.key = key;
+
         //LOG(INFO) << "key=" << key << ", " << std::string(msg.meta.push?"push":"pull");
 
         if (msg.meta.push && msg.meta.request) { // push request
@@ -882,6 +901,12 @@ class RDMAVan : public Van {
     total_len += buffer_ctx->meta_len;
     uint64_t data_num = buffer_ctx->data_num;
     cur += buffer_ctx->meta_len;
+
+    if (IsValidPushpull(*msg)) {
+      // Log key
+      uint64_t key_for_logging = DecodeKey(msg.meta.key, msg.meta.recver);
+      BPSLogger::RecvEventLogger::GetLogger().LogEvent(false, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
+    }
 
     if (IsValidPushpull(*msg) && !msg->meta.push && !msg->meta.request) { // worker
       std::lock_guard<std::mutex> lock(map_mu_);
