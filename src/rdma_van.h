@@ -704,8 +704,7 @@ class RDMAVan : public Van {
       // Log key
       SArray<Key> logger_keys(msg.data[0]);
       uint64_t key_for_logging = DecodeKey(logger_keys[0], msg.meta.recver);
-      CHECK_NE(msg.meta.sender, Meta::kEmpty);
-      BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
+      BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, my_node_.id, msg.meta.recver);
 
       if (!is_server) { // worker
         std::lock_guard<std::mutex> lock(map_mu_);
