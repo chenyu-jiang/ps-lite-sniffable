@@ -6,7 +6,7 @@
 */
 #ifndef PS_RDMA_VAN_H_
 #define PS_RDMA_VAN_H_
-
+#define DMLC_USE_RDMA
 #ifdef DMLC_USE_RDMA
 
 #include <errno.h>
@@ -682,6 +682,7 @@ class RDMAVan : public Van {
   int SendMsg(Message &msg) override {
     int remote_id = msg.meta.recver;
     CHECK_NE(remote_id, Meta::kEmpty);
+    CHECK_NE(msg.meta.sender, Meta::kEmpty);
 
     for (auto& sa : msg.data) {
       if (sa.size()) {
