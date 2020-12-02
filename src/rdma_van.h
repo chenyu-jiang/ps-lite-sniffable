@@ -682,7 +682,6 @@ class RDMAVan : public Van {
   int SendMsg(Message &msg) override {
     int remote_id = msg.meta.recver;
     CHECK_NE(remote_id, Meta::kEmpty);
-    CHECK_NE(msg.meta.sender, Meta::kEmpty);
 
     for (auto& sa : msg.data) {
       if (sa.size()) {
@@ -705,6 +704,7 @@ class RDMAVan : public Van {
       // Log key
       SArray<Key> logger_keys(msg.data[0]);
       uint64_t key_for_logging = DecodeKey(logger_keys[0], msg.meta.recver);
+      CHECK_NE(msg.meta.sender, Meta::kEmpty);
       BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
 
       if (!is_server) { // worker
@@ -906,6 +906,7 @@ class RDMAVan : public Van {
     if (IsValidPushpull(*msg)) {
       // Log key
       uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.recver);
+      CHECK_NE(msg->meta.sender, Meta::kEmpty);
       BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
     }
 
