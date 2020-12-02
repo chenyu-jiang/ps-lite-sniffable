@@ -100,6 +100,7 @@ class ZMQVan : public Van {
     // zmq_ctx_set(context_, ZMQ_IO_THREADS, 4);
     Van::Start(customer_id);
     zmq_log(my_node_.DebugString().c_str());
+    zmq_log("I am ZMQ VAN!!!!");
   }
 
   void Stop() override {

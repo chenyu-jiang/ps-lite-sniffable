@@ -487,6 +487,7 @@ class RDMAVan : public Van {
     Van::Start(customer_id);
 
     BPSLogger::RecvEventLogger::GetLogger().LogString(my_node_.DebugString());
+    BPSLogger::RecvEventLogger::GetLogger().LogString("I AM RDMA VAN!!!");
   }
 
   void Stop() override {
