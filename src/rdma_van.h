@@ -486,8 +486,7 @@ class RDMAVan : public Van {
     start_mu_.unlock();
     Van::Start(customer_id);
 
-    BPSLogger::RecvEventLogger::GetLogger().LogString(my_node_.DebugString());
-    BPSLogger::RecvEventLogger::GetLogger().LogString("I AM RDMA VAN!!!");
+    BPSRDMALogger::RecvEventLogger::GetLogger().LogString(my_node_.DebugString());
   }
 
   void Stop() override {
@@ -703,9 +702,9 @@ class RDMAVan : public Van {
 
     if (IsValidPushpull(msg)) {
       // Log key
-      SArray<Key> keys(msg.data[0]);
-      uint64_t key_for_logging = DecodeKey(keys[0], msg.meta.recver);
-      BPSLogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
+      SArray<Key> logger_keys(msg.data[0]);
+      uint64_t key_for_logging = DecodeKey(logger_keys[0], msg.meta.recver);
+      BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(true, msg.meta.push, msg.meta.request, key_for_logging, msg.meta.sender, msg.meta.recver);
 
       if (!is_server) { // worker
         std::lock_guard<std::mutex> lock(map_mu_);
@@ -906,7 +905,7 @@ class RDMAVan : public Van {
     if (IsValidPushpull(*msg)) {
       // Log key
       uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.recver);
-      BPSLogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
+      BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
     }
 
     if (IsValidPushpull(*msg) && !msg->meta.push && !msg->meta.request) { // worker

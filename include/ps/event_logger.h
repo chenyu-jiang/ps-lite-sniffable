@@ -9,7 +9,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/async.h>
 
-namespace BPSLogger
+namespace BPSRDMALogger
 {
 
 class RecvEventLogger {

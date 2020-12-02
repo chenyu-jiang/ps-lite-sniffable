@@ -8,7 +8,7 @@
 
 #include "ps/event_logger.h"
 
-namespace BPSLogger
+namespace BPSRDMALogger
 {
 
 static size_t start_identifier_size = 3 * sizeof(int) + 4 + sizeof(uint64_t); 
