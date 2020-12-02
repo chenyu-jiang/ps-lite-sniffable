@@ -45,7 +45,7 @@ lint:
 
 ps: build/libps.a
 
-OBJS = $(addprefix build/, customer.o postoffice.o van.o meta.pb.o)
+OBJS = $(addprefix build/, customer.o postoffice.o van.o meta.pb.o event_logger.o)
 build/libps.a: $(OBJS)
 	ar crv $@ $(filter %.o, $?)
 
