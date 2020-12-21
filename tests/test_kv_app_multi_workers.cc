@@ -1,4 +1,4 @@
-#include <cmath>
+#include <math.h>
 #include "ps/ps.h"
 using namespace ps;
 

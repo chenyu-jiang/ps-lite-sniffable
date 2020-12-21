@@ -1,6 +1,5 @@
-#include <cmath>
+#include <math.h>
 #include "ps/ps.h"
-#include <cmath>
 
 using namespace ps;
 
