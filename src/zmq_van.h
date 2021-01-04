@@ -213,7 +213,7 @@ class ZMQVan : public Van {
     } else {
       SerializeUInt64(UINT64_MAX, identifier_buf+ 3*sizeof(int)+4);
     }
-    MultiplyBuffer(&identifier_size, &identifier_buf);
+    // MultiplyBuffer(&identifier_size, &identifier_buf);
     zmq_msg_t identifyer_msg;
     zmq_msg_init_data(&identifyer_msg, identifier_buf, identifier_size, FreeData, NULL);
     while (true) {
@@ -273,7 +273,7 @@ class ZMQVan : public Van {
     } else {
       SerializeUInt64(UINT64_MAX, end_identifier_buf + 2*sizeof(int)+4);
     }
-    MultiplyBuffer(&end_identifier_size, &end_identifier_buf);
+    // MultiplyBuffer(&end_identifier_size, &end_identifier_buf);
     zmq_msg_t end_identifyer_msg;
     zmq_msg_init_data(&end_identifyer_msg, end_identifier_buf, end_identifier_size, FreeData, NULL);
     while (true) {
