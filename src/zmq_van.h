@@ -37,6 +37,42 @@ inline void FreeData(void* data, void* hint) {
   }
 }
 
+uint64_t DecodeKey(Key key, int receiver_id) {
+  if (Postoffice::Get()->is_server()) {
+    auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->my_rank()];
+    return key - kr.begin();
+  } else {
+    auto kr = Postoffice::Get()->GetServerKeyRanges()[Postoffice::Get()->IDtoRank(receiver_id)];
+    return key - kr.begin();
+  }
+}
+
+void SerializeInt(int integer, char* buf) {
+  for(int byte_index=0; byte_index<sizeof(int); byte_index++) {
+    buf[byte_index] = integer >> byte_index * 8;
+  }
+}
+
+void SerializeUInt64(uint64_t integer, char* buf) {
+  for(int byte_index=0; byte_index<sizeof(uint64_t); byte_index++) {
+    buf[byte_index] = integer >> byte_index * 8;
+  }
+}
+
+void DeserializeUInt64(uint64_t* integer, char* buf) {
+  *integer = 0;
+  for(int byte_index=0; byte_index<sizeof(uint64_t); byte_index++) {
+    *integer += (unsigned char)buf[byte_index] << byte_index * 8;
+  }
+}
+
+void DeserializeInt(int* integer, char* buf) {
+  *integer = 0;
+  for(int byte_index=0; byte_index<sizeof(int); byte_index++) {
+    *integer += buf[byte_index] << byte_index * 8;
+  }
+}
+
 /**
  * \brief ZMQ based implementation
  */
@@ -66,6 +102,7 @@ class ZMQVan : public Van {
     PS_VLOG(1) << "BYTEPS_ZMQ_NTHREADS set to " << byteps_zmq_nthreads;
 
     Van::Start(customer_id);
+    zmq_log(my_node_.DebugString().c_str());
   }
 
   void Stop() override {
@@ -288,7 +325,8 @@ class ZMQVan : public Van {
 
     while (true) {
       ZmqBufferContext *buf_ctx = new ZmqBufferContext();
-
+      int msg_length = 0;
+      uint64_t key = 0;
       for (int i = 0;; ++i) {
         zmq_msg_t* zmsg = new zmq_msg_t;
         CHECK(zmq_msg_init(zmsg) == 0) << zmq_strerror(errno);
@@ -316,17 +354,35 @@ class ZMQVan : public Van {
           CHECK(zmq_msg_more(zmsg));
           zmq_msg_close(zmsg);
           delete zmsg;
-        }
-        else if (i == 1) {
+        } else if (i == 1) {
+          // start identifier
+          DeserializeInt(&msg_length, buf);
+          CHECK(zmq_msg_more(zmsg));
+          zmq_msg_close(zmsg);
+          delete zmsg;
+        } else if (i == 2) {
           // task
           buf_ctx->meta_zmsg = zmsg;
           bool more = zmq_msg_more(zmsg);
           if (!more) break;
         }
         else {
-          buf_ctx->data_zmsg.push_back(zmsg);
-          bool more = zmq_msg_more(zmsg);
-          if (!more) break;
+          // data or end identifier
+          if (msg_length == 0) {
+            // end identifyer
+            CHECK(buf[0] == 'e');
+            CHECK(!zmq_msg_more(zmsg));
+            zmq_msg_close(zmsg);
+            delete zmsg;
+            break;
+          } else {
+            // data msg
+            buf_ctx->data_zmsg.push_back(zmsg);
+            msg_length --;
+            bool more = zmq_msg_more(zmsg);
+            // if (!more) break;
+            CHECK(more);
+          }
         }
       } // for
       if (should_stop_) break;
@@ -335,6 +391,36 @@ class ZMQVan : public Van {
   }
 
   int ZmqSendMsg(void* socket, Message& msg) {
+    // send start identifier
+    // send start identifier
+    int identifier_size = 3 * sizeof(int) + 4 + sizeof(uint64_t); 
+    char* identifier_buf;
+    identifier_buf = new char[identifier_size];
+    SerializeInt(msg.data.size(), identifier_buf);
+    identifier_buf[sizeof(int)] = 's';
+    identifier_buf[sizeof(int)+1] = ':';
+    identifier_buf[sizeof(int)+2] = msg.meta.request ? 1 : 0;
+    identifier_buf[sizeof(int)+3] = msg.meta.push ? 1 : 0;
+    SerializeInt(my_node_.id, identifier_buf + sizeof(int)+4);
+    SerializeInt(msg.meta.recver, identifier_buf + 2*sizeof(int)+4);
+    if(msg.data.size()) {
+      SArray<Key> keys(msg.data[0]);
+      uint64_t key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeUInt64(key, identifier_buf+ 3*sizeof(int)+4);
+    } else {
+      SerializeUInt64(UINT64_MAX, identifier_buf+ 3*sizeof(int)+4);
+    }
+
+    zmq_msg_t identifyer_msg;
+    zmq_msg_init_data(&identifyer_msg, identifier_buf, identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&identifyer_msg, socket, ZMQ_SNDMORE) == identifier_size) break;
+      if (errno == EINTR) continue;
+      return -1;
+    }
+
+    int send_bytes = identifier_size;
+
     // send meta
     int meta_size;
     char* meta_buf = nullptr;
@@ -350,7 +436,8 @@ class ZMQVan : public Van {
       CHECK(0) << zmq_strerror(errno);
     }
     zmq_msg_close(&meta_msg);
-    int send_bytes = meta_size;
+
+    send_bytes += meta_size;
 
     // send data
     for (int i = 0; i < n; ++i) {
@@ -370,6 +457,36 @@ class ZMQVan : public Van {
       zmq_msg_close(&data_msg);
       send_bytes += data_size;
     }
+
+    // send end identifier
+    int end_identifier_size = 2*sizeof(int) + 4 + sizeof(uint64_t); 
+    char* end_identifier_buf;
+    end_identifier_buf = new char[end_identifier_size];
+    end_identifier_buf[0] = 'e';
+    end_identifier_buf[1] = ':';
+    end_identifier_buf[2] = msg.meta.request ? 1 : 0;
+    end_identifier_buf[3] = msg.meta.push ? 1 : 0;
+    SerializeInt(my_node_.id, end_identifier_buf + 4);
+    SerializeInt(msg.meta.recver, end_identifier_buf + sizeof(int)+4);
+    if(msg.data.size()) {
+      SArray<Key> keys(msg.data[0]);
+      uint64_t key = DecodeKey(keys[0], msg.meta.recver);
+      SerializeUInt64(key, end_identifier_buf + 2*sizeof(int)+4);
+    } else {
+      SerializeUInt64(UINT64_MAX, end_identifier_buf + 2*sizeof(int)+4);
+    }
+
+    zmq_msg_t end_identifyer_msg;
+    zmq_msg_init_data(&end_identifyer_msg, end_identifier_buf, end_identifier_size, FreeData, NULL);
+    while (true) {
+      if (zmq_msg_send(&end_identifyer_msg, socket, 0) == end_identifier_size) break;
+      if (errno == EINTR) continue;
+      LOG(WARNING) << "failed to send message to node [" << id
+              << "] errno: " << errno << " " << zmq_strerror(errno)
+              << ". ";
+      return -1;
+    }
+    send_bytes += end_identifier_size;
     return send_bytes;
   }
 
