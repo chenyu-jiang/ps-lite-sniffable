@@ -392,7 +392,7 @@ class ZMQVan : public Van {
 
   int ZmqSendMsg(void* socket, Message& msg) {
     // send start identifier
-    // send start identifier
+    int id = msg.meta.recver;
     int identifier_size = 3 * sizeof(int) + 4 + sizeof(uint64_t); 
     char* identifier_buf;
     identifier_buf = new char[identifier_size];
