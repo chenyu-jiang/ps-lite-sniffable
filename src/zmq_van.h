@@ -427,7 +427,7 @@ class ZMQVan : public Van {
     PackMeta(msg.meta, &meta_buf, &meta_size);
     int tag = ZMQ_SNDMORE;
     int n = msg.data.size();
-    if (n == 0) tag = 0;
+    // if (n == 0) tag = 0;
     zmq_msg_t meta_msg;
     zmq_msg_init_data(&meta_msg, meta_buf, meta_size, FreeData, NULL);
     while (true) {
@@ -479,7 +479,7 @@ class ZMQVan : public Van {
     zmq_msg_t end_identifyer_msg;
     zmq_msg_init_data(&end_identifyer_msg, end_identifier_buf, end_identifier_size, FreeData, NULL);
     while (true) {
-      if (zmq_msg_send(&end_identifyer_msg, socket, 0) == end_identifier_size) break;
+      if (zmq_msg_send(&end_identifyer_msg, socket, ZMQ_DONTWAIT) == end_identifier_size) break;
       if (errno == EINTR) continue;
       LOG(WARNING) << "failed to send message to node [" << id
               << "] errno: " << errno << " " << zmq_strerror(errno)
