@@ -904,7 +904,7 @@ class RDMAVan : public Van {
 
     if (IsValidPushpull(*msg)) {
       // Log key
-      uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.recver);
+      uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.sender);
       CHECK_NE(msg->meta.sender, Meta::kEmpty);
       BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
     }
