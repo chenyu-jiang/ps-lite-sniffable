@@ -1079,7 +1079,6 @@ class RDMAVan : public Van {
             char *cur = buf_ctx->buffer;
 
             UnpackMeta(cur, buf_ctx->meta_len, &msg->meta);
-            total_len += buf_ctx->meta_len;
             uint64_t data_num = buf_ctx->data_num;
 
             if (IsValidPushpull(*msg)) {
