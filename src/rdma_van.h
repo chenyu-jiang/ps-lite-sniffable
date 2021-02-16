@@ -902,12 +902,12 @@ class RDMAVan : public Van {
     uint64_t data_num = buffer_ctx->data_num;
     cur += buffer_ctx->meta_len;
 
-    if (IsValidPushpull(*msg)) {
-      // Log key
-      uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.sender);
-      CHECK_NE(msg->meta.sender, Meta::kEmpty);
-      BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
-    }
+    // if (IsValidPushpull(*msg)) {
+    //   // Log key
+    //   uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.sender);
+    //   CHECK_NE(msg->meta.sender, Meta::kEmpty);
+    //   BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
+    // }
 
     if (IsValidPushpull(*msg) && !msg->meta.push && !msg->meta.request) { // worker
       std::lock_guard<std::mutex> lock(map_mu_);
@@ -1069,6 +1069,25 @@ class RDMAVan : public Van {
             uint32_t addr_idx = wc[i].imm_data;
             BufferContext *buf_ctx = addr_pool_.GetAddressAndRelease(addr_idx);
             recv_buffers_.Push(std::make_tuple(endpoint, buf_ctx));
+            // pre_parse the message here
+            Message preparsed_msg;
+            Message *msg = &preparsed_msg;
+            msg->data.clear();
+            msg->meta.recver = my_node_.id;
+            msg->meta.sender = endpoint->node_id;
+
+            char *cur = buf_ctx->buffer;
+
+            UnpackMeta(cur, buf_ctx->meta_len, &msg->meta);
+            total_len += buf_ctx->meta_len;
+            uint64_t data_num = buf_ctx->data_num;
+
+            if (IsValidPushpull(*msg)) {
+              // Log key
+              uint64_t key_for_logging = DecodeKey(msg->meta.key, msg->meta.sender);
+              CHECK_NE(msg->meta.sender, Meta::kEmpty);
+              BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
+            }
             ReleaseWorkRequestContext(context, endpoint);
           } break;
           case IBV_WC_RECV: {
