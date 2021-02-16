@@ -1068,7 +1068,7 @@ class RDMAVan : public Van {
             // LOG(INFO) << "opcode: IBV_WC_RECV_RDMA_WITH_IMM";
             uint32_t addr_idx = wc[i].imm_data;
             BufferContext *buf_ctx = addr_pool_.GetAddressAndRelease(addr_idx);
-            recv_buffers_.Push(std::make_tuple(endpoint, buf_ctx));
+
             // pre_parse the message here
             Message preparsed_msg;
             Message *msg = &preparsed_msg;
@@ -1087,6 +1087,8 @@ class RDMAVan : public Van {
               CHECK_NE(msg->meta.sender, Meta::kEmpty);
               BPSRDMALogger::RecvEventLogger::GetLogger().LogEvent(false, msg->meta.push, msg->meta.request, key_for_logging, msg->meta.sender, msg->meta.recver);
             }
+            
+            recv_buffers_.Push(std::make_tuple(endpoint, buf_ctx));
             ReleaseWorkRequestContext(context, endpoint);
           } break;
           case IBV_WC_RECV: {
