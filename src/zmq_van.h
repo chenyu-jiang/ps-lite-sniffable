@@ -445,7 +445,7 @@ class ZMQVan : public Van {
       SArray<char>* data = new SArray<char>(msg.data[i]);
       int data_size = data->size();
       zmq_msg_init_data(&data_msg, data->data(), data->size(), FreeData, data);
-      if (i == n - 1) tag = ZMQ_DONTWAIT;
+      // if (i == n - 1) tag = ZMQ_DONTWAIT;
       while (true) {
         if (zmq_msg_send(&data_msg, socket, tag) == data_size) break;
         if (errno == EINTR) continue;
